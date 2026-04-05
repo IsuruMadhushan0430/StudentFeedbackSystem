@@ -1,0 +1,91 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+	--bg-1: #0b1021;
+	--bg-2: #0f172a;
+	--accent: #6366f1;
+	--accent-2: #22d3ee;
+	--card: rgba(255, 255, 255, 0.06);
+	--stroke: rgba(255, 255, 255, 0.12);
+}
+
+body {
+	font-family: 'Space Grotesk', 'Segoe UI', system-ui, -apple-system, sans-serif;
+	background: radial-gradient(circle at 20% 20%, rgba(99, 102, 241, 0.12), transparent 25%),
+							radial-gradient(circle at 80% 0%, rgba(34, 211, 238, 0.1), transparent 25%),
+							linear-gradient(120deg, var(--bg-1), var(--bg-2));
+	color: #0f172a;
+	min-height: 100vh;
+}
+
+* {
+	scrollbar-width: thin;
+	scrollbar-color: rgba(15, 23, 42, 0.3) rgba(15, 23, 42, 0.08);
+}
+
+*::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+	background: rgba(15, 23, 42, 0.06);
+}
+
+*::-webkit-scrollbar-thumb {
+	background: linear-gradient(180deg, var(--accent), var(--accent-2));
+	border-radius: 999px;
+	border: 2px solid rgba(255, 255, 255, 0.4);
+}
+
+@layer components {
+	.card-surface {
+		background: rgba(255, 255, 255, 0.85);
+		backdrop-filter: blur(18px);
+		border: 1px solid rgba(255, 255, 255, 0.6);
+		box-shadow: 0 10px 40px rgba(15, 23, 42, 0.12), 0 20px 80px rgba(99, 102, 241, 0.12);
+	}
+
+	.glass-panel {
+		background: var(--card);
+		border: 1px solid var(--stroke);
+		backdrop-filter: blur(16px);
+	}
+
+	.interactive-card {
+		position: relative;
+		overflow: hidden;
+		transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+		border: 1px solid rgba(99, 102, 241, 0.16);
+	}
+
+	.interactive-card::before {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: linear-gradient(120deg, rgba(99, 102, 241, 0.12), rgba(34, 211, 238, 0.12));
+		opacity: 0;
+		transition: opacity 200ms ease;
+		pointer-events: none;
+	}
+
+	.interactive-card:hover {
+		transform: translateY(-6px) scale(1.01);
+		box-shadow: 0 20px 60px rgba(15, 23, 42, 0.18);
+		border-color: rgba(99, 102, 241, 0.35);
+	}
+
+	.interactive-card:hover::before {
+		opacity: 1;
+	}
+
+	.neon-pill {
+		background: linear-gradient(120deg, var(--accent), var(--accent-2));
+		color: #0b1021;
+		box-shadow: 0 10px 30px rgba(99, 102, 241, 0.35);
+	}
+}
