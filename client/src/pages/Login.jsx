@@ -130,6 +130,11 @@ const Login = () => {
                   {showPassword ? 'Hide' : 'Show'}
                 </button>
               </div>
+              <div className="text-right">
+                <Link to="/forgot-password" className="text-sm font-semibold text-blue-600 hover:underline">
+                  Forgot password?
+                </Link>
+              </div>
             </div>
 
             <button type="submit" className="w-full py-3 rounded-2xl text-white font-semibold shadow-lg transition-all duration-200 neon-pill">Login</button>

@@ -22,6 +22,14 @@ router.post('/login', [
   body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
 ], authController.login);
 
+router.post('/forgot-password', [
+  body('email').isEmail().withMessage('Valid email is required'),
+], authController.forgotPassword);
+
+router.post('/reset-password/:token', [
+  body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+], authController.resetPassword);
+
 router.get('/departments', authController.getDepartments);
 
 module.exports = router;
