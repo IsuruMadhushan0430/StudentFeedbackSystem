@@ -1,6 +1,7 @@
 const Student = require('../models/Student');
 const Subject = require('../models/Subject');
 const Feedback = require('../models/Feedback');
+const FeedbackSubmission = require('../models/FeedbackSubmission');
 const Semester = require('../models/Semester');
 const { validationResult } = require('express-validator');
 
@@ -42,7 +43,7 @@ exports.getSubjects = async (req, res) => {
       },
     });
 
-    const submittedFeedback = await Feedback.find({
+    const submittedFeedback = await FeedbackSubmission.find({
       studentId: student._id,
       subjectId: { $in: subjects.map(s => s._id) },
     }).select('subjectId');
@@ -104,7 +105,7 @@ exports.submitFeedback = async (req, res) => {
     }
 
     // Prevent multiple submissions per student per subject
-    const existingFeedback = await Feedback.findOne({
+    const existingFeedback = await FeedbackSubmission.findOne({
       subjectId,
       studentId: student._id,
     });
@@ -118,7 +119,6 @@ exports.submitFeedback = async (req, res) => {
     }
 
     const feedback = new Feedback({
-      studentId: student._id,
       subjectId,
       lecturerId,
       ratings,
@@ -126,6 +126,22 @@ exports.submitFeedback = async (req, res) => {
     });
 
     await feedback.save();
+
+    try {
+      await FeedbackSubmission.create({
+        studentId: student._id,
+        subjectId,
+        lecturerId,
+        feedbackId: feedback._id,
+      });
+    } catch (submissionErr) {
+      await Feedback.deleteOne({ _id: feedback._id });
+      if (submissionErr?.code === 11000) {
+        return res.status(400).json({ message: 'You have already submitted feedback for this subject.' });
+      }
+      throw submissionErr;
+    }
+
     res.json({ message: 'Feedback submitted successfully' });
   } catch (err) {
     console.error(err.message);
@@ -141,11 +157,17 @@ exports.getMyFeedback = async (req, res) => {
       return res.status(404).json({ message: 'Student not found' });
     }
 
-    const feedback = await Feedback.find({ studentId: student._id })
-      .populate({ path: 'subjectId', select: 'name semester' })
-      .populate({ path: 'lecturerId', populate: { path: 'userId', select: 'name' } })
+    const submissions = await FeedbackSubmission.find({ studentId: student._id })
+      .populate({
+        path: 'feedbackId',
+        populate: [
+          { path: 'subjectId', select: 'name semester' },
+          { path: 'lecturerId', populate: { path: 'userId', select: 'name' } },
+        ],
+      })
       .sort({ createdAt: -1 });
 
+    const feedback = submissions.map((submission) => submission.feedbackId).filter(Boolean);
     res.json(feedback);
   } catch (err) {
     console.error(err.message);

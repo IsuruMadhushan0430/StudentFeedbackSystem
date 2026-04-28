@@ -1,11 +1,6 @@
 const mongoose = require('mongoose');
 
 const feedbackSchema = new mongoose.Schema({
-  studentId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Student',
-    required: true,
-  },
   subjectId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Subject',
@@ -31,7 +26,5 @@ const feedbackSchema = new mongoose.Schema({
     default: '',
   },
 }, { timestamps: true });
-
-feedbackSchema.index({ studentId: 1, subjectId: 1 }, { unique: true });
 
 module.exports = mongoose.model('Feedback', feedbackSchema);
