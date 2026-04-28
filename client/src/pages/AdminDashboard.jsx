@@ -733,7 +733,6 @@ const AdminDashboard = () => {
                                           <span className="text-[11px] font-semibold text-amber-600 bg-amber-50 px-2 py-1 rounded-full">Unassigned</span>
                                         )}
                                       </div>
-                                      <p className="text-[11px] text-gray-500 mt-1">Subject AY: {subject.academicYear || 'N/A'}</p>
                                     </li>
                                   ))}
                                 </ul>
