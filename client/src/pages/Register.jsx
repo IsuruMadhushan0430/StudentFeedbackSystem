@@ -16,6 +16,7 @@ const Register = () => {
     semester: '',
   });
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [departments, setDepartments] = useState([]);
   const [showPassword, setShowPassword] = useState(false);
   const { login } = useContext(AuthContext);
@@ -61,15 +62,11 @@ const Register = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+    setSuccess('');
 
     if ((formData.password || '').length < 8) {
       setError('Password must be at least 8 characters.');
-      return;
-    }
-
-    const normalizedAY = normalizeAcademicYear(formData.academicYear);
-    if (!/^\d{2}\/\d{2}$/.test(normalizedAY)) {
-      setError('Academic year must be YY/YY (e.g., 23/24).');
       return;
     }
 
@@ -80,8 +77,16 @@ const Register = () => {
       role: formData.role,
       year: formData.year,
       semester: formData.semester,
-      academicYear: normalizedAY,
     };
+
+    if (formData.role === 'student') {
+      const normalizedAY = normalizeAcademicYear(formData.academicYear);
+      if (!/^\d{2}\/\d{2}$/.test(normalizedAY)) {
+        setError('Academic year must be YY/YY (e.g., 23/24).');
+        return;
+      }
+      payload.academicYear = normalizedAY;
+    }
 
     // Only send department when required (student or lecturer)
     if (formData.role !== 'admin') {
@@ -90,6 +95,22 @@ const Register = () => {
 
     try {
       const res = await authAPI.register(payload);
+
+      if (formData.role === 'lecturer') {
+        setSuccess('Registration submitted. Please wait for admin approval before logging in.');
+        setFormData({
+          name: '',
+          email: '',
+          password: '',
+          academicYear: '',
+          role: 'student',
+          department: '',
+          year: '',
+          semester: '',
+        });
+        return;
+      }
+
       login(res.data.token, res.data.user);
       navigate(`/${res.data.user.role}`);
     } catch (err) {
@@ -112,6 +133,7 @@ const Register = () => {
           </div>
 
           {error && <p className="text-red-600 bg-red-50 border border-red-100 rounded-xl p-3 mb-4 text-sm">{error}</p>}
+          {success && <p className="text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl p-3 mb-4 text-sm">{success}</p>}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

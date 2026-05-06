@@ -30,6 +30,7 @@ const AdminDashboard = () => {
     semesters: []
   });
   const [editingSemester, setEditingSemester] = useState(null);
+  const [pendingUsers, setPendingUsers] = useState([]);
   const { logout } = useContext(AuthContext);
 
   const fetchDepartments = async () => {
@@ -50,9 +51,19 @@ const AdminDashboard = () => {
     }
   };
 
+  const fetchPendingUsers = async () => {
+    try {
+      const res = await adminAPI.getPendingUsers();
+      setPendingUsers(res.data);
+    } catch (err) {
+      console.error('Failed to fetch pending users', err);
+    }
+  };
+
   useEffect(() => {
     fetchDepartments();
     fetchDashboardData();
+    fetchPendingUsers();
   }, []);
 
   const handleAddDepartment = async (e) => {
@@ -151,6 +162,19 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleApproval = async (userId, approve) => {
+    const action = approve ? 'approve' : 'reject';
+    if (!window.confirm(`Are you sure you want to ${action} this user?`)) return;
+    try {
+      await adminAPI.updateUserApproval(userId, { approve });
+      alert(`User ${action}ed successfully`);
+      fetchPendingUsers(); // Refresh pending list
+      fetchDashboardData(); // Refresh main dashboard data if user was approved
+    } catch (err) {
+      alert(err.response?.data?.message || `Error ${action}ing user`);
+    }
+  };
+
   const studentSemesterOptions = Array.from(
     new Set(dashboardData.students.map((s) => `${s.year} ${s.semester}`))
   ).sort();
@@ -207,23 +231,33 @@ const AdminDashboard = () => {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[{
-            label: 'Students',
-            value: dashboardData.students.length,
-            accent: 'from-emerald-500 to-teal-400'
-          }, {
-            label: 'Lecturers',
-            value: dashboardData.lecturers.length,
-            accent: 'from-blue-500 to-indigo-500'
-          }, {
-            label: 'Departments',
-            value: dashboardData.departments.length,
-            accent: 'from-amber-500 to-orange-500'
-          }, {
-            label: 'Subjects',
-            value: dashboardData.subjects.length,
-            accent: 'from-purple-500 to-fuchsia-500'
-          }].map((item) => (
+          {([
+            {
+              label: 'Students',
+              value: dashboardData.students.length,
+              accent: 'from-emerald-500 to-teal-400'
+            },
+            {
+              label: 'Lecturers',
+              value: dashboardData.lecturers.length,
+              accent: 'from-blue-500 to-indigo-500'
+            },
+            {
+              label: 'Departments',
+              value: dashboardData.departments.length,
+              accent: 'from-amber-500 to-orange-500'
+            },
+            {
+              label: 'Subjects',
+              value: dashboardData.subjects.length,
+              accent: 'from-purple-500 to-fuchsia-500'
+            },
+            {
+              label: 'Pending',
+              value: pendingUsers.length,
+              accent: 'from-yellow-500 to-amber-400',
+            },
+          ]).map((item) => (
             <div key={item.label} className="card-surface rounded-2xl p-4 interactive-card">
               <div className="text-xs font-bold uppercase tracking-[0.2em] text-gray-500">{item.label}</div>
               <div className="mt-2 flex items-end justify-between">
@@ -466,6 +500,32 @@ const AdminDashboard = () => {
               </ul>
             </div>
           </div>
+        </div>
+
+        <div className="card-surface rounded-3xl p-6 interactive-card h-80 overflow-y-auto">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-gray-900">Pending Approvals ({pendingUsers.length})</h3>
+            <span className="text-xs font-semibold px-3 py-1 rounded-full bg-yellow-50 text-yellow-700">Action Required</span>
+          </div>
+          <ul className="space-y-3">
+            {pendingUsers.map((user) => (
+              <li key={user._id} className="flex justify-between items-start bg-gray-50 border border-gray-100 rounded-2xl p-3">
+                <div>
+                  <p className="font-semibold text-gray-900">
+                    {user.name}
+                    <span className="text-xs font-normal text-gray-500"> ({user.role})</span>
+                  </p>
+                  <p className="text-gray-600 text-sm">{user.email}</p>
+                  <p className="text-gray-500 text-xs mt-1">Dept: {user.department?.name || 'N/A'}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => handleApproval(user._id, true)} className="text-green-600 hover:text-green-700 text-xs font-semibold">Approve</button>
+                  <button onClick={() => handleApproval(user._id, false)} className="text-red-600 hover:text-red-700 text-xs font-semibold">Reject</button>
+                </div>
+              </li>
+            ))}
+            {pendingUsers.length === 0 && <p className="text-gray-500 italic">No pending approvals.</p>}
+          </ul>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

@@ -222,3 +222,45 @@ exports.deleteSubject = async (req, res) => {
     res.status(500).send('Server error');
   }
 };
+
+exports.getPendingUsers = async (req, res) => {
+  try {
+    const pendingUsers = await User.find({ isApproved: false, role: 'lecturer' })
+      .populate('department', 'name')
+      .select('-password');
+    res.json(pendingUsers);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server error');
+  }
+};
+
+exports.updateUserApproval = async (req, res) => {
+  const { userId } = req.params;
+  const { approve } = req.body; // Expecting a boolean: true for approve, false for reject
+
+  try {
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (approve) {
+      user.isApproved = true;
+      await user.save();
+      res.json({ message: 'User approved successfully', user });
+    } else {
+      // Rejection means deletion
+      if (user.role === 'student') {
+        await Student.findOneAndDelete({ userId });
+      } else if (user.role === 'lecturer') {
+        await Lecturer.findOneAndDelete({ userId });
+      }
+      await User.findByIdAndDelete(userId);
+      res.json({ message: 'User rejected and deleted' });
+    }
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server error');
+  }
+};

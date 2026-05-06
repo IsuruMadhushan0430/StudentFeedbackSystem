@@ -42,6 +42,8 @@ export const adminAPI = {
   getDashboardData: () => API.get('/admin/dashboard-data'),
   deleteDepartment: (departmentId) => API.delete(`/admin/department/${departmentId}`),
   deleteSubject: (subjectId) => API.delete(`/admin/subject/${subjectId}`),
+  getPendingUsers: () => API.get('/admin/users/pending'),
+  updateUserApproval: (userId, data) => API.put(`/admin/users/${userId}/approval`, data),
 };
 
 export default API;

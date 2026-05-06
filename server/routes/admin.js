@@ -51,4 +51,7 @@ router.get('/dashboard-data', auth, roleAuth(['admin']), adminController.getDash
 router.delete('/department/:departmentId', auth, roleAuth(['admin']), adminController.deleteDepartment);
 router.delete('/subject/:subjectId', auth, roleAuth(['admin']), adminController.deleteSubject);
 
+router.get('/users/pending', auth, roleAuth(['admin']), adminController.getPendingUsers);
+router.put('/users/:userId/approval', auth, roleAuth(['admin']), adminController.updateUserApproval);
+
 module.exports = router;
