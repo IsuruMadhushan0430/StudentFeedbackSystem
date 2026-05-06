@@ -44,6 +44,9 @@ export const adminAPI = {
   deleteSubject: (subjectId) => API.delete(`/admin/subject/${subjectId}`),
   getPendingUsers: () => API.get('/admin/users/pending'),
   updateUserApproval: (userId, data) => API.put(`/admin/users/${userId}/approval`, data),
+  importStudents: (formData) => API.post('/admin/students/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
 };
 
 export default API;

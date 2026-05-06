@@ -1,10 +1,15 @@
 const express = require('express');
 const { body } = require('express-validator');
+const multer = require('multer');
 const adminController = require('../controllers/adminController');
 const auth = require('../middleware/auth');
 const roleAuth = require('../middleware/roleAuth');
 
 const router = express.Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
 
 router.post('/department', [
   auth,
@@ -53,5 +58,6 @@ router.delete('/subject/:subjectId', auth, roleAuth(['admin']), adminController.
 
 router.get('/users/pending', auth, roleAuth(['admin']), adminController.getPendingUsers);
 router.put('/users/:userId/approval', auth, roleAuth(['admin']), adminController.updateUserApproval);
+router.post('/students/import', auth, roleAuth(['admin']), upload.single('file'), adminController.importStudents);
 
 module.exports = router;

@@ -4,7 +4,11 @@ const User = require('../models/User');
 const Student = require('../models/Student');
 const Lecturer = require('../models/Lecturer');
 const Semester = require('../models/Semester');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const xlsx = require('xlsx');
 const { validationResult } = require('express-validator');
+const { sendStudentWelcomeEmail } = require('../utils/email');
 
 exports.addDepartment = async (req, res) => {
   const errors = validationResult(req);
@@ -259,6 +263,189 @@ exports.updateUserApproval = async (req, res) => {
       await User.findByIdAndDelete(userId);
       res.json({ message: 'User rejected and deleted' });
     }
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server error');
+  }
+};
+
+const normalizeAcademicYear = (value) => {
+  if (!value) return '';
+  const cleaned = value.trim().replace(/-/g, '/');
+  const fourDigit = cleaned.match(/^(\d{4})\s*\/\s*(\d{4})$/);
+  if (fourDigit) {
+    return `${fourDigit[1].slice(-2)}/${fourDigit[2].slice(-2)}`;
+  }
+  const twoDigit = cleaned.match(/^(\d{2})\s*\/\s*(\d{2})$/);
+  if (twoDigit) {
+    return `${twoDigit[1]}/${twoDigit[2]}`;
+  }
+  return cleaned;
+};
+
+const generateTempPassword = () => {
+  let password = '';
+  while (password.length < 8) {
+    password = crypto.randomBytes(9)
+      .toString('base64')
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .slice(0, 10);
+  }
+  return password;
+};
+
+exports.importStudents = async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: 'Excel file is required' });
+  }
+
+  try {
+    const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) {
+      return res.status(400).json({ message: 'Excel file is empty' });
+    }
+
+    const sheet = workbook.Sheets[sheetName];
+    const rawRows = xlsx.utils.sheet_to_json(sheet, { defval: '', raw: false });
+
+    if (rawRows.length === 0) {
+      return res.status(400).json({ message: 'No rows found in Excel file' });
+    }
+
+    const departments = await Department.find({}, 'name');
+    const departmentMap = new Map(
+      departments.map((dep) => [dep.name.trim().toLowerCase(), dep])
+    );
+
+    const emails = rawRows
+      .map((row) => {
+        const normalized = {};
+        Object.keys(row).forEach((key) => {
+          const normalizedKey = String(key || '').trim().toLowerCase();
+          normalized[normalizedKey] = String(row[key] ?? '').trim();
+        });
+        return (normalized.email || '').toLowerCase();
+      })
+      .filter(Boolean);
+
+    const existingUsers = await User.find({ email: { $in: emails } }, 'email');
+    const existingEmails = new Set(existingUsers.map((u) => u.email.toLowerCase()));
+
+    const results = {
+      imported: 0,
+      skipped: 0,
+      failed: [],
+    };
+
+    for (let i = 0; i < rawRows.length; i += 1) {
+      const rowNumber = i + 2;
+      const rawRow = rawRows[i];
+      const normalized = {};
+
+      Object.keys(rawRow).forEach((key) => {
+        const normalizedKey = String(key || '').trim().toLowerCase();
+        normalized[normalizedKey] = String(rawRow[key] ?? '').trim();
+      });
+
+      const name = normalized.name || '';
+      const email = (normalized.email || '').toLowerCase();
+      const departmentName = (normalized.department || '').toLowerCase();
+      const year = normalized.year || '';
+      const semester = normalized.semester || '';
+      const academicYearRaw = normalized.academicyear || normalized['academic year'] || '';
+      const academicYear = normalizeAcademicYear(academicYearRaw);
+
+      if (!name || !email || !departmentName || !year || !semester || !academicYear) {
+        results.failed.push({ row: rowNumber, email: email || 'N/A', reason: 'Missing required fields' });
+        continue;
+      }
+
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        results.failed.push({ row: rowNumber, email, reason: 'Invalid email format' });
+        continue;
+      }
+
+      if (!['Year I', 'Year II', 'Year III'].includes(year)) {
+        results.failed.push({ row: rowNumber, email, reason: 'Invalid year' });
+        continue;
+      }
+
+      if (!['Semester I', 'Semester II'].includes(semester)) {
+        results.failed.push({ row: rowNumber, email, reason: 'Invalid semester' });
+        continue;
+      }
+
+      if (!/^\d{2}\/\d{2}$/.test(academicYear)) {
+        results.failed.push({ row: rowNumber, email, reason: 'Invalid academic year' });
+        continue;
+      }
+
+      const department = departmentMap.get(departmentName);
+      if (!department) {
+        results.failed.push({ row: rowNumber, email, reason: 'Department not found' });
+        continue;
+      }
+
+      if (existingEmails.has(email)) {
+        results.skipped += 1;
+        continue;
+      }
+
+      const tempPassword = generateTempPassword();
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(tempPassword, salt);
+
+      let user = null;
+
+      try {
+        user = new User({
+          name,
+          email,
+          password: hashedPassword,
+          role: 'student',
+          department: department._id,
+          isApproved: true,
+          mustResetPassword: true,
+        });
+
+        await user.save();
+
+        const student = new Student({
+          userId: user._id,
+          year,
+          semester,
+          academicYear,
+        });
+
+        await student.save();
+        existingEmails.add(email);
+        results.imported += 1;
+
+        try {
+          await sendStudentWelcomeEmail({
+            to: email,
+            name,
+            tempPassword,
+            loginUrl: `${process.env.CLIENT_URL || 'http://localhost:5173'}/login`,
+          });
+        } catch (emailErr) {
+          results.failed.push({
+            row: rowNumber,
+            email,
+            reason: 'Email failed after account creation',
+          });
+        }
+      } catch (rowErr) {
+        if (user?._id) {
+          await User.findByIdAndDelete(user._id);
+          await Student.findOneAndDelete({ userId: user._id });
+        }
+        results.failed.push({ row: rowNumber, email, reason: 'Failed to create account' });
+      }
+    }
+
+    res.json(results);
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server error');

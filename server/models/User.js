@@ -29,6 +29,14 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  mustResetPassword: {
+    type: Boolean,
+    default: false,
+  },
+  mustResetPassword: {
+    type: Boolean,
+    default: false,
+  },
   department: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Department',

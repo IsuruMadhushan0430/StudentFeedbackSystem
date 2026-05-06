@@ -71,7 +71,7 @@ exports.register = async (req, res) => {
         console.error('JWT Sign Error:', err);
         return res.status(500).send('Server error');
       }
-      res.json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role, department: user.department } });
+      res.json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role, department: user.department, mustResetPassword: user.mustResetPassword } });
     });
   } catch (err) {
     console.error(err.message);
@@ -151,6 +151,7 @@ exports.forgotPassword = async (req, res) => {
 
     user.resetPasswordToken = resetTokenHash;
     user.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
+    user.mustResetPassword = false;
     await user.save();
 
     const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/reset-password/${resetToken}`;

@@ -32,6 +32,9 @@ const AdminDashboard = () => {
   const [editingSemester, setEditingSemester] = useState(null);
   const [pendingUsers, setPendingUsers] = useState([]);
   const [activeSection, setActiveSection] = useState('pending');
+  const [importFile, setImportFile] = useState(null);
+  const [importResult, setImportResult] = useState(null);
+  const [importing, setImporting] = useState(false);
 
   const sections = [
     { id: 'pending', label: 'Pending approvals' },
@@ -183,6 +186,30 @@ const AdminDashboard = () => {
       fetchDashboardData(); // Refresh main dashboard data if user was approved
     } catch (err) {
       alert(err.response?.data?.message || `Error ${action}ing user`);
+    }
+  };
+
+  const handleImportStudents = async (e) => {
+    e.preventDefault();
+    if (!importFile) {
+      alert('Please select an Excel file first');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', importFile);
+
+    try {
+      setImporting(true);
+      setImportResult(null);
+      const res = await adminAPI.importStudents(formData);
+      setImportResult(res.data);
+      setImportFile(null);
+      fetchDashboardData();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Student import failed');
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -743,50 +770,96 @@ const AdminDashboard = () => {
             )}
 
             {activeSection === 'students' && (
-              <div className="card-surface rounded-3xl p-6 interactive-card">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-900">Students ({filteredStudents.length})</h3>
-                    <p className="text-xs text-gray-500">Filter by department and semester</p>
+              <div className="space-y-6">
+                <div className="card-surface rounded-3xl p-6 interactive-card">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900">Import students from Excel</h3>
+                      <p className="text-xs text-gray-500">Columns: name, email, department, year, semester, academicYear</p>
+                    </div>
+                    <span className="text-xs font-semibold px-3 py-1 rounded-full bg-slate-900 text-white">Bulk upload</span>
                   </div>
-                  <div className="flex gap-2 items-center">
-                    <select
-                      value={studentFilters.department}
-                      onChange={(e) => setStudentFilters((prev) => ({ ...prev, department: e.target.value }))}
-                      className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none"
+                  <form onSubmit={handleImportStudents} className="space-y-4">
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls"
+                      onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3"
+                    />
+                    <button
+                      type="submit"
+                      className="w-full py-3 rounded-2xl text-white font-semibold neon-pill shadow-lg"
+                      disabled={importing}
                     >
-                      <option value="">All departments</option>
-                      {departments.map((dep) => (
-                        <option key={dep._id} value={dep._id}>{dep.name}</option>
-                      ))}
-                    </select>
-                    <select
-                      value={studentFilters.semester}
-                      onChange={(e) => setStudentFilters((prev) => ({ ...prev, semester: e.target.value }))}
-                      className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none"
-                    >
-                      <option value="">All semesters</option>
-                      {studentSemesterOptions.map((sem) => (
-                        <option key={sem} value={sem}>{sem}</option>
-                      ))}
-                    </select>
-                  </div>
+                      {importing ? 'Importing...' : 'Upload and import'}
+                    </button>
+                  </form>
+
+                  {importResult && (
+                    <div className="mt-4 bg-gray-50 border border-gray-100 rounded-2xl p-4">
+                      <p className="text-sm font-semibold text-gray-800">Imported: {importResult.imported}</p>
+                      <p className="text-sm font-semibold text-gray-800">Skipped: {importResult.skipped}</p>
+                      {importResult.failed?.length > 0 && (
+                        <div className="mt-3">
+                          <p className="text-sm font-semibold text-red-600">Failed rows</p>
+                          <ul className="mt-2 space-y-2 text-sm text-gray-700">
+                            {importResult.failed.map((item, index) => (
+                              <li key={`${item.row}-${index}`} className="bg-white border border-gray-100 rounded-xl p-2">
+                                Row {item.row}: {item.email} — {item.reason}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <ul className="space-y-3">
-                  {filteredStudents.map((student) => (
-                    <li key={student._id} className="flex justify-between items-start bg-gray-50 border border-gray-100 rounded-2xl p-3">
-                      <div>
-                        <p className="font-semibold text-gray-900">{student.userId?.name}</p>
-                        <p className="text-gray-600 text-sm">{student.userId?.email}</p>
-                        <p className="text-gray-500 text-xs mt-1">Dept: {student.userId?.department?.name || 'N/A'}</p>
-                        <p className="text-gray-500 text-xs">Semester: {student.year} {student.semester}</p>
-                        <p className="text-gray-500 text-xs">Academic Year: {student.academicYear || 'N/A'}</p>
-                      </div>
-                      <button onClick={() => handleDeleteUser(student.userId?._id)} className="text-red-600 hover:text-red-700 text-xs font-semibold">Remove</button>
-                    </li>
-                  ))}
-                  {filteredStudents.length === 0 && <p className="text-gray-500 italic">No students found for the selected filters.</p>}
-                </ul>
+
+                <div className="card-surface rounded-3xl p-6 interactive-card">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900">Students ({filteredStudents.length})</h3>
+                      <p className="text-xs text-gray-500">Filter by department and semester</p>
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      <select
+                        value={studentFilters.department}
+                        onChange={(e) => setStudentFilters((prev) => ({ ...prev, department: e.target.value }))}
+                        className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none"
+                      >
+                        <option value="">All departments</option>
+                        {departments.map((dep) => (
+                          <option key={dep._id} value={dep._id}>{dep.name}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={studentFilters.semester}
+                        onChange={(e) => setStudentFilters((prev) => ({ ...prev, semester: e.target.value }))}
+                        className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none"
+                      >
+                        <option value="">All semesters</option>
+                        {studentSemesterOptions.map((sem) => (
+                          <option key={sem} value={sem}>{sem}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <ul className="space-y-3">
+                    {filteredStudents.map((student) => (
+                      <li key={student._id} className="flex justify-between items-start bg-gray-50 border border-gray-100 rounded-2xl p-3">
+                        <div>
+                          <p className="font-semibold text-gray-900">{student.userId?.name}</p>
+                          <p className="text-gray-600 text-sm">{student.userId?.email}</p>
+                          <p className="text-gray-500 text-xs mt-1">Dept: {student.userId?.department?.name || 'N/A'}</p>
+                          <p className="text-gray-500 text-xs">Semester: {student.year} {student.semester}</p>
+                          <p className="text-gray-500 text-xs">Academic Year: {student.academicYear || 'N/A'}</p>
+                        </div>
+                        <button onClick={() => handleDeleteUser(student.userId?._id)} className="text-red-600 hover:text-red-700 text-xs font-semibold">Remove</button>
+                      </li>
+                    ))}
+                    {filteredStudents.length === 0 && <p className="text-gray-500 italic">No students found for the selected filters.</p>}
+                  </ul>
+                </div>
               </div>
             )}
 
