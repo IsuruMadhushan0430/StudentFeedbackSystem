@@ -30,7 +30,6 @@ exports.getSubjects = async (req, res) => {
       { academicYear: { $exists: false } },
     ];
 
-    // Find subjects and also check if feedback is open for this specific department/semester
     const subjects = await Subject.find({ 
       department: department,
       semester: semesterStr,
@@ -55,7 +54,6 @@ exports.getSubjects = async (req, res) => {
       alreadySubmitted: submittedMap.has(s._id.toString()),
     }));
 
-    // Prefer active semester window; otherwise match by academic year, then any
     let semesterDates = activeSemesterDoc || null;
     if (!semesterDates) {
       semesterDates = await Semester.findOne({ department: department, semester: semesterStr, academicYear: student.academicYear })
@@ -95,7 +93,7 @@ exports.submitFeedback = async (req, res) => {
     }
 
     const feedbackStartDate = new Date(semester.endDate);
-    feedbackStartDate.setDate(feedbackStartDate.getDate() - 14); // Allow feedback last 2 weeks before end
+    feedbackStartDate.setDate(feedbackStartDate.getDate() - 14);
 
     const now = new Date();
     if (now < feedbackStartDate || now > semester.endDate) {
@@ -104,7 +102,7 @@ exports.submitFeedback = async (req, res) => {
       });
     }
 
-    // Prevent multiple submissions per student per subject
+  
     const existingFeedback = await FeedbackSubmission.findOne({
       subjectId,
       studentId: student._id,
@@ -149,7 +147,6 @@ exports.submitFeedback = async (req, res) => {
   }
 };
 
-// Return all feedback authored by the authenticated student
 exports.getMyFeedback = async (req, res) => {
   try {
     const student = await Student.findOne({ userId: req.user.id });

@@ -171,7 +171,7 @@ exports.updateSemester = async (req, res) => {
 exports.getDashboardData = async (req, res) => {
   try {
     const departments = await Department.find();
-    // Fetch students with their user profile and department, plus year/semester
+    
     const students = await Student.find()
       .populate({
         path: 'userId',

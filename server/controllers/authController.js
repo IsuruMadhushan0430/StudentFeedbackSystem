@@ -22,6 +22,10 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: 'User already exists' });
     }
 
+    if (role === 'admin') {
+      return res.status(403).json({ message: 'Admin registration is not allowed' });
+    }
+
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
@@ -31,6 +35,7 @@ exports.register = async (req, res) => {
       password: hashedPassword,
       role,
       department,
+      isApproved: false,
     });
 
     await user.save();
@@ -86,6 +91,10 @@ exports.login = async (req, res) => {
     const user = await User.findOne({ email }).populate('department');
     if (!user) {
       return res.status(400).json({ message: 'Invalid credentials' });
+    }
+
+    if (!user.isApproved) {
+      return res.status(403).json({ message: 'Account is pending approval' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);

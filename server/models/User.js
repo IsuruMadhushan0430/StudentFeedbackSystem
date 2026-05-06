@@ -25,6 +25,10 @@ const userSchema = new mongoose.Schema({
     enum: ['student', 'lecturer', 'admin'],
     required: true,
   },
+  isApproved: {
+    type: Boolean,
+    default: false,
+  },
   department: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Department',
@@ -33,5 +37,26 @@ const userSchema = new mongoose.Schema({
     },
   },
 }, { timestamps: true });
+
+userSchema.pre('validate', async function(next) {
+  if (this.role !== 'admin') {
+    return next();
+  }
+
+  try {
+    const existingAdmin = await mongoose.model('User').findOne({
+      role: 'admin',
+      _id: { $ne: this._id },
+    });
+
+    if (existingAdmin) {
+      this.invalidate('role', 'Only one admin account is allowed');
+    }
+
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 module.exports = mongoose.model('User', userSchema);

@@ -134,7 +134,7 @@ const Register = () => {
                   <input
                     type="text"
                     name="name"
-                    placeholder="Alex Johnson"
+                    placeholder="Name Here"
                     value={formData.name}
                     onChange={handleChange}
                     className="w-full bg-transparent outline-none placeholder:text-center"
@@ -219,7 +219,6 @@ const Register = () => {
                 >
                   <option value="student">Student</option>
                   <option value="lecturer">Lecturer</option>
-                  <option value="admin">Admin</option>
                 </select>
               </div>
 
