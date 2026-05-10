@@ -9,11 +9,8 @@ const Register = () => {
     name: '',
     email: '',
     password: '',
-    academicYear: '',
-    role: 'student',
+    role: 'lecturer',
     department: '',
-    year: '',
-    semester: '',
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -34,29 +31,8 @@ const Register = () => {
     fetchDepartments();
   }, []);
 
-  const normalizeAcademicYear = (value) => {
-    if (!value) return '';
-    const cleaned = value
-      .trim()
-      .replace(/[\uFF0F]/g, '/') // normalize full-width slash
-      .replace(/-/g, '/'); // allow hyphen input
-    const fourDigit = cleaned.match(/^(\d{4})\s*\/\s*(\d{4})$/);
-    if (fourDigit) {
-      return `${fourDigit[1].slice(-2)}/${fourDigit[2].slice(-2)}`;
-    }
-    const twoDigit = cleaned.match(/^(\d{2})\s*\/\s*(\d{2})$/);
-    if (twoDigit) {
-      return `${twoDigit[1]}/${twoDigit[2]}`;
-    }
-    return cleaned;
-  };
-
   const handleChange = (e) => {
     const { name, value } = e.target;
-    if (name === 'academicYear') {
-      setFormData({ ...formData, [name]: normalizeAcademicYear(value) });
-      return;
-    }
     setFormData({ ...formData, [name]: value });
   };
 
@@ -74,42 +50,23 @@ const Register = () => {
       name: formData.name,
       email: formData.email,
       password: formData.password,
-      role: formData.role,
-      year: formData.year,
-      semester: formData.semester,
+      role: 'lecturer',
     };
 
-    if (formData.role === 'student') {
-      const normalizedAY = normalizeAcademicYear(formData.academicYear);
-      if (!/^\d{2}\/\d{2}$/.test(normalizedAY)) {
-        setError('Academic year must be YY/YY (e.g., 23/24).');
-        return;
-      }
-      payload.academicYear = normalizedAY;
-    }
-
-    // Only send department when required (student or lecturer)
-    if (formData.role !== 'admin') {
-      payload.department = formData.department;
-    }
+    payload.department = formData.department;
 
     try {
       const res = await authAPI.register(payload);
 
-      if (formData.role === 'lecturer') {
-        setSuccess('Registration submitted. Please wait for admin approval before logging in.');
-        setFormData({
-          name: '',
-          email: '',
-          password: '',
-          academicYear: '',
-          role: 'student',
-          department: '',
-          year: '',
-          semester: '',
-        });
-        return;
-      }
+      setSuccess('Registration submitted. Please wait for admin approval before logging in.');
+      setFormData({
+        name: '',
+        email: '',
+        password: '',
+        role: 'lecturer',
+        department: '',
+      });
+      return;
 
       login(res.data.token, res.data.user);
       navigate(`/${res.data.user.role}`);
@@ -232,85 +189,27 @@ const Register = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-gray-700">Role</label>
+                <div className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm font-semibold text-gray-700">
+                  Lecturer
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-gray-700">Department</label>
                 <select
-                  name="role"
-                  value={formData.role}
+                  name="department"
+                  value={formData.department}
                   onChange={handleChange}
                   className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none"
                   required
                 >
-                  <option value="student">Student</option>
-                  <option value="lecturer">Lecturer</option>
+                  <option value="">Select department</option>
+                  {departments.map((dep) => (
+                    <option key={dep._id} value={dep._id}>{dep.name}</option>
+                  ))}
                 </select>
               </div>
-
-              {formData.role !== 'admin' && (
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">Department</label>
-                  <select
-                    name="department"
-                    value={formData.department}
-                    onChange={handleChange}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none"
-                    required
-                  >
-                    <option value="">Select department</option>
-                    {departments.map((dep) => (
-                      <option key={dep._id} value={dep._id}>{dep.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
             </div>
-
-            {formData.role === 'student' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">Academic Year (YY/YY)</label>
-                  <input
-                    type="text"
-                    name="academicYear"
-                    placeholder="21/22"
-                    value={formData.academicYear}
-                    onChange={handleChange}
-                    onBlur={() => setFormData((prev) => ({ ...prev, academicYear: normalizeAcademicYear(prev.academicYear) }))}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none placeholder:text-center"
-                    title="Use YY/YY format, e.g., 23/24"
-                    required
-                  />
-                  <p className="text-xs text-gray-500">Tip: 2023/2024 will auto-format to 23/24.</p>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">Year</label>
-                  <select
-                    name="year"
-                    value={formData.year}
-                    onChange={handleChange}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none"
-                    required
-                  >
-                    <option value="">Select year</option>
-                    <option value="Year I">Year I</option>
-                    <option value="Year II">Year II</option>
-                    <option value="Year III">Year III</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">Semester</label>
-                  <select
-                    name="semester"
-                    value={formData.semester}
-                    onChange={handleChange}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none"
-                    required
-                  >
-                    <option value="">Select semester</option>
-                    <option value="Semester I">Semester I</option>
-                    <option value="Semester II">Semester II</option>
-                  </select>
-                </div>
-              </div>
-            )}
 
             <button type="submit" className="w-full py-3 rounded-2xl text-white font-semibold shadow-lg transition-all duration-200 neon-pill">Register</button>
           </form>
