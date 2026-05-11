@@ -27,7 +27,7 @@ router.post('/subject', [
 
 router.put('/subject/:subjectId/assign-lecturer', [
   auth,
-  roleAuth(['admin']),
+  roleAuth(['hod']),
   body('lecturerId').isMongoId().withMessage('Valid lecturer ID required'),
   body('academicYear').trim().matches(/^\d{2}\/\d{2}$/).withMessage('Academic year must be YY/YY'),
 ], adminController.assignLecturerToSubject);
@@ -36,7 +36,7 @@ router.delete('/user/:userId', auth, roleAuth(['admin']), adminController.delete
 
 router.post('/semester', [
   auth,
-  roleAuth(['admin']),
+  roleAuth(['hod']),
   body('department').isMongoId().withMessage('Valid department ID required'),
   body('semester').isIn(['Year I Semester I', 'Year I Semester II', 'Year II Semester I', 'Year II Semester II', 'Year III Semester I', 'Year III Semester II']).withMessage('Invalid semester'),
   body('startDate').isISO8601().withMessage('Valid start date required'),
@@ -46,18 +46,21 @@ router.post('/semester', [
 
 router.put('/semester/:semesterId', [
   auth,
-  roleAuth(['admin']),
+  roleAuth(['hod']),
   body('startDate').isISO8601().withMessage('Valid start date required'),
   body('endDate').isISO8601().withMessage('Valid end date required'),
   body('academicYear').trim().matches(/^\d{2}\/\d{2}$/).withMessage('Academic year must be YY/YY'),
 ], adminController.updateSemester);
 
-router.get('/dashboard-data', auth, roleAuth(['admin']), adminController.getDashboardData);
+router.get('/dashboard-data', auth, roleAuth(['admin', 'hod']), adminController.getDashboardData);
 router.delete('/department/:departmentId', auth, roleAuth(['admin']), adminController.deleteDepartment);
 router.delete('/subject/:subjectId', auth, roleAuth(['admin']), adminController.deleteSubject);
 
 router.get('/users/pending', auth, roleAuth(['admin']), adminController.getPendingUsers);
 router.put('/users/:userId/approval', auth, roleAuth(['admin']), adminController.updateUserApproval);
+router.put('/users/:userId/promote-hod', auth, roleAuth(['admin']), adminController.promoteToHod);
+router.put('/users/:userId/demote-hod', auth, roleAuth(['admin']), adminController.demoteHod);
 router.post('/students/import', auth, roleAuth(['admin']), upload.single('file'), adminController.importStudents);
+router.post('/lecturers/import', auth, roleAuth(['admin']), upload.single('file'), adminController.importLecturers);
 
 module.exports = router;

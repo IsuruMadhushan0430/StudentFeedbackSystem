@@ -5,9 +5,9 @@ const roleAuth = require('../middleware/roleAuth');
 
 const router = express.Router();
 
-router.get('/feedback', auth, roleAuth(['lecturer']), lecturerController.getFeedback);
+router.get('/feedback', auth, roleAuth(['lecturer', 'hod']), lecturerController.getFeedback);
 
-router.get('/report', auth, roleAuth(['lecturer']), lecturerController.getReport);
-router.get('/subjects', auth, roleAuth(['lecturer']), lecturerController.getSubjects);
+router.get('/report', auth, roleAuth(['lecturer', 'hod']), lecturerController.getReport);
+router.get('/subjects', auth, roleAuth(['lecturer', 'hod']), lecturerController.getSubjects);
 
 module.exports = router;

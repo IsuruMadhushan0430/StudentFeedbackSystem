@@ -1,4 +1,5 @@
 import { useState, useContext, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import AuthContext from '../context/AuthContext';
 import { adminAPI, authAPI } from '../services/api';
 
@@ -25,6 +26,7 @@ const AdminDashboard = () => {
   const [dashboardData, setDashboardData] = useState({
     students: [],
     lecturers: [],
+    hods: [],
     departments: [],
     subjects: [],
     semesters: []
@@ -35,20 +37,32 @@ const AdminDashboard = () => {
   const [importFile, setImportFile] = useState(null);
   const [importResult, setImportResult] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [lecturerImportFile, setLecturerImportFile] = useState(null);
+  const [lecturerImportResult, setLecturerImportResult] = useState(null);
+  const [lecturerImporting, setLecturerImporting] = useState(false);
 
-  const sections = [
+  const adminSections = [
     { id: 'pending', label: 'Pending approvals' },
     { id: 'departments', label: 'Departments' },
     { id: 'subjects', label: 'Subjects' },
-    { id: 'assignments', label: 'Lecturer assignments' },
-    { id: 'semesters', label: 'Semesters' },
     { id: 'students', label: 'Students' },
     { id: 'lecturers', label: 'Lecturers' },
   ];
-  const { logout } = useContext(AuthContext);
+  const hodSections = [
+    { id: 'assignments', label: 'Lecturer assignments' },
+    { id: 'semesters', label: 'Semesters' },
+  ];
+  const { logout, user } = useContext(AuthContext);
+  const navigate = useNavigate();
+  const isHod = user?.role === 'hod';
+  const isAdmin = user?.role === 'admin';
+  const sections = isHod ? hodSections : adminSections;
 
   const fetchDepartments = async () => {
     try {
+      if (isHod) {
+        return;
+      }
       const res = await authAPI.getDepartments();
       setDepartments(res.data);
     } catch (err) {
@@ -77,8 +91,22 @@ const AdminDashboard = () => {
   useEffect(() => {
     fetchDepartments();
     fetchDashboardData();
-    fetchPendingUsers();
-  }, []);
+    if (isAdmin) {
+      fetchPendingUsers();
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (isHod) {
+      setActiveSection('assignments');
+    }
+  }, [isHod]);
+
+  useEffect(() => {
+    if (isHod) {
+      setDepartments(dashboardData.departments);
+    }
+  }, [isHod, dashboardData.departments]);
 
   const handleAddDepartment = async (e) => {
     e.preventDefault();
@@ -189,6 +217,26 @@ const AdminDashboard = () => {
     }
   };
 
+  const handlePromoteToHod = async (userId) => {
+    if (!window.confirm('Promote this lecturer to HOD?')) return;
+    try {
+      await adminAPI.promoteToHod(userId);
+      fetchDashboardData();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to promote lecturer');
+    }
+  };
+
+  const handleDemoteHod = async (userId) => {
+    if (!window.confirm('Demote this HOD to lecturer?')) return;
+    try {
+      await adminAPI.demoteHod(userId);
+      fetchDashboardData();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to demote HOD');
+    }
+  };
+
   const handleImportStudents = async (e) => {
     e.preventDefault();
     if (!importFile) {
@@ -210,6 +258,30 @@ const AdminDashboard = () => {
       alert(err.response?.data?.message || 'Student import failed');
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleImportLecturers = async (e) => {
+    e.preventDefault();
+    if (!lecturerImportFile) {
+      alert('Please select an Excel file first');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', lecturerImportFile);
+
+    try {
+      setLecturerImporting(true);
+      setLecturerImportResult(null);
+      const res = await adminAPI.importLecturers(formData);
+      setLecturerImportResult(res.data);
+      setLecturerImportFile(null);
+      fetchDashboardData();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Lecturer import failed');
+    } finally {
+      setLecturerImporting(false);
     }
   };
 
@@ -244,6 +316,16 @@ const AdminDashboard = () => {
       ? dashboardData.departments.filter((d) => d._id === subjectFilters.department)
       : [];
 
+  const lecturerRoster = isAdmin
+    ? [...dashboardData.lecturers, ...dashboardData.hods]
+    : dashboardData.lecturers;
+
+  const assignmentLecturers = [...dashboardData.lecturers];
+  if (isHod && user?.id && !assignmentLecturers.some((lecturer) => lecturer._id === user.id)) {
+    assignmentLecturers.push({ _id: user.id, name: user.name || 'HOD' });
+  }
+
+
   return (
     <div className="min-h-screen px-4 py-8 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -252,12 +334,20 @@ const AdminDashboard = () => {
           <div className="absolute inset-0 opacity-30" style={{ background: 'radial-gradient(circle at 18% 20%, rgba(255,255,255,0.25), transparent 35%), radial-gradient(circle at 85% 10%, rgba(255,255,255,0.2), transparent 30%)' }} aria-hidden="true"></div>
           <div className="relative p-6 md:p-8 flex flex-col md:flex-row md:items-center md:justify-between gap-6 text-white">
             <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/80">Admin Control Center</p>
-              <h1 className="text-3xl md:text-4xl font-black leading-tight">Manage approvals and academic data</h1>
-              <p className="text-white/80 max-w-2xl">Use the sidebar to manage approvals, departments, subjects, and semester timelines.</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/80">{isHod ? 'HOD Control Center' : 'Admin Control Center'}</p>
+              <h1 className="text-3xl md:text-4xl font-black leading-tight">{isHod ? 'Manage department planning' : 'Manage approvals and academic data'}</h1>
+              <p className="text-white/80 max-w-2xl">{isHod ? 'Use the sidebar to manage lecturer assignments and semester timelines.' : 'Use the sidebar to manage approvals, departments, subjects, and users.'}</p>
             </div>
             <div className="flex items-center gap-3">
-              <span className="px-4 py-2 rounded-full bg-white/15 border border-white/20 text-sm font-semibold">Role: Admin</span>
+              <span className="px-4 py-2 rounded-full bg-white/15 border border-white/20 text-sm font-semibold">Role: {isHod ? 'HOD' : 'Admin'}</span>
+              {isHod && (
+                <button
+                  onClick={() => navigate('/lecturer')}
+                  className="px-5 py-3 rounded-2xl bg-white/20 border border-white/30 text-white font-semibold shadow-lg hover:-translate-y-0.5 transition-all duration-200"
+                >
+                  Lecturer dashboard
+                </button>
+              )}
               <button onClick={logout} className="px-5 py-3 rounded-2xl bg-white text-gray-900 font-semibold shadow-lg hover:-translate-y-0.5 transition-all duration-200">Logout</button>
             </div>
           </div>
@@ -267,7 +357,7 @@ const AdminDashboard = () => {
           <aside className="card-surface rounded-3xl p-4 h-fit lg:sticky lg:top-6">
             <div className="mb-4">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">Navigation</p>
-              <h2 className="text-lg font-bold text-gray-900">Admin sections</h2>
+              <h2 className="text-lg font-bold text-gray-900">{isHod ? 'HOD sections' : 'Admin sections'}</h2>
             </div>
             <nav className="space-y-2">
               {sections.map((section) => (
@@ -529,7 +619,7 @@ const AdminDashboard = () => {
                     required
                   >
                     <option value="">Select Lecturer</option>
-                    {dashboardData.lecturers.map((lecturer) => (
+                    {assignmentLecturers.map((lecturer) => (
                       <option key={lecturer._id} value={lecturer._id}>{lecturer.name}</option>
                     ))}
                   </select>
@@ -864,24 +954,83 @@ const AdminDashboard = () => {
             )}
 
             {activeSection === 'lecturers' && (
-              <div className="card-surface rounded-3xl p-6 interactive-card">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-bold text-gray-900">Lecturers ({dashboardData.lecturers.length})</h3>
-                  <span className="text-xs font-semibold px-3 py-1 rounded-full bg-blue-50 text-blue-700">Manage</span>
+              <div className="space-y-6">
+                <div className="card-surface rounded-3xl p-6 interactive-card">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900">Import lecturers from Excel</h3>
+                      <p className="text-xs text-gray-500">Columns: name, email, department</p>
+                    </div>
+                    <span className="text-xs font-semibold px-3 py-1 rounded-full bg-slate-900 text-white">Bulk upload</span>
+                  </div>
+                  <form onSubmit={handleImportLecturers} className="space-y-4">
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls"
+                      onChange={(e) => setLecturerImportFile(e.target.files?.[0] || null)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3"
+                    />
+                    <button
+                      type="submit"
+                      className="w-full py-3 rounded-2xl text-white font-semibold neon-pill shadow-lg"
+                      disabled={lecturerImporting}
+                    >
+                      {lecturerImporting ? 'Importing...' : 'Upload and import'}
+                    </button>
+                  </form>
+
+                  {lecturerImportResult && (
+                    <div className="mt-4 bg-gray-50 border border-gray-100 rounded-2xl p-4">
+                      <p className="text-sm font-semibold text-gray-800">Imported: {lecturerImportResult.imported}</p>
+                      <p className="text-sm font-semibold text-gray-800">Skipped: {lecturerImportResult.skipped}</p>
+                      {lecturerImportResult.failed?.length > 0 && (
+                        <div className="mt-3">
+                          <p className="text-sm font-semibold text-red-600">Failed rows</p>
+                          <ul className="mt-2 space-y-2 text-sm text-gray-700">
+                            {lecturerImportResult.failed.map((item, index) => (
+                              <li key={`${item.row}-${index}`} className="bg-white border border-gray-100 rounded-xl p-2">
+                                Row {item.row}: {item.email} — {item.reason}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <ul className="space-y-3">
-                  {dashboardData.lecturers.map(lecturer => (
-                    <li key={lecturer._id} className="flex justify-between items-start bg-gray-50 border border-gray-100 rounded-2xl p-3">
-                      <div>
-                        <p className="font-semibold text-gray-900">{lecturer.name}</p>
-                        <p className="text-gray-600 text-sm">{lecturer.email}</p>
-                        <p className="text-gray-500 text-xs mt-1">Dept: {lecturer.department?.name || 'N/A'}</p>
-                      </div>
-                      <button onClick={() => handleDeleteUser(lecturer._id)} className="text-red-600 hover:text-red-700 text-xs font-semibold">Remove</button>
-                    </li>
-                  ))}
-                  {dashboardData.lecturers.length === 0 && <p className="text-gray-500 italic">No lecturers found.</p>}
-                </ul>
+
+                <div className="card-surface rounded-3xl p-6 interactive-card">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-bold text-gray-900">Lecturers ({lecturerRoster.length})</h3>
+                    <span className="text-xs font-semibold px-3 py-1 rounded-full bg-blue-50 text-blue-700">Manage</span>
+                  </div>
+                  <ul className="space-y-3">
+                    {lecturerRoster.map((lecturer) => (
+                      <li key={lecturer._id} className="flex justify-between items-start bg-gray-50 border border-gray-100 rounded-2xl p-3">
+                        <div>
+                          <p className="font-semibold text-gray-900">
+                            {lecturer.name}
+                            {lecturer.role === 'hod' && (
+                              <span className="ml-2 text-[11px] font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">HOD</span>
+                            )}
+                          </p>
+                          <p className="text-gray-600 text-sm">{lecturer.email}</p>
+                          <p className="text-gray-500 text-xs mt-1">Dept: {lecturer.department?.name || 'N/A'}</p>
+                        </div>
+                        <div className="flex flex-col gap-2 items-end">
+                          {isAdmin && lecturer.role === 'lecturer' && (
+                            <button onClick={() => handlePromoteToHod(lecturer._id)} className="text-amber-600 hover:text-amber-700 text-xs font-semibold">Promote to HOD</button>
+                          )}
+                          {isAdmin && lecturer.role === 'hod' && (
+                            <button onClick={() => handleDemoteHod(lecturer._id)} className="text-amber-600 hover:text-amber-700 text-xs font-semibold">Demote to lecturer</button>
+                          )}
+                          <button onClick={() => handleDeleteUser(lecturer._id)} className="text-red-600 hover:text-red-700 text-xs font-semibold">Remove</button>
+                        </div>
+                      </li>
+                    ))}
+                    {lecturerRoster.length === 0 && <p className="text-gray-500 italic">No lecturers found.</p>}
+                  </ul>
+                </div>
               </div>
             )}
           </main>

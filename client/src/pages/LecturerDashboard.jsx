@@ -1,4 +1,5 @@
 import { useState, useEffect, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
 import AuthContext from '../context/AuthContext';
 import { lecturerAPI } from '../services/api';
 
@@ -9,6 +10,7 @@ const LecturerDashboard = () => {
   const [newFeedbackMap, setNewFeedbackMap] = useState({});
   const [loading, setLoading] = useState(true);
   const { logout, user } = useContext(AuthContext);
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchDashboardData();
@@ -128,6 +130,14 @@ const LecturerDashboard = () => {
                   className="bg-white/15 border border-white/25 text-white px-5 py-2 rounded-2xl font-semibold hover:bg-white/25 transition-all duration-200"
                 >
                   Show All Subjects
+                </button>
+              )}
+              {user?.role === 'hod' && (
+                <button
+                  onClick={() => navigate('/hod')}
+                  className="bg-white/15 border border-white/25 text-white px-5 py-2 rounded-2xl font-semibold hover:bg-white/25 transition-all duration-200"
+                >
+                  HOD dashboard
                 </button>
               )}
               <span className="px-4 py-2 rounded-full bg-white/15 border border-white/20 text-sm font-semibold">Role: Lecturer</span>

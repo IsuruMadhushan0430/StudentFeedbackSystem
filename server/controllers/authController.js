@@ -26,6 +26,10 @@ exports.register = async (req, res) => {
       return res.status(403).json({ message: 'Admin registration is not allowed' });
     }
 
+    if (role === 'hod') {
+      return res.status(403).json({ message: 'HOD registration is not allowed' });
+    }
+
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 

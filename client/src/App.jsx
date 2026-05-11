@@ -20,8 +20,9 @@ function App() {
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password/:token" element={<ResetPassword />} />
             <Route path="/student" element={<ProtectedRoute role="student"><StudentDashboard /></ProtectedRoute>} />
-            <Route path="/lecturer" element={<ProtectedRoute role="lecturer"><LecturerDashboard /></ProtectedRoute>} />
+            <Route path="/lecturer" element={<ProtectedRoute roles={["lecturer", "hod"]}><LecturerDashboard /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
+            <Route path="/hod" element={<ProtectedRoute role="hod"><AdminDashboard /></ProtectedRoute>} />
             <Route path="/" element={<Login />} />
           </Routes>
         </div>
