@@ -1,7 +1,7 @@
 import { useState, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AuthContext from '../context/AuthContext';
-import { adminAPI, authAPI } from '../services/api';
+import { adminAPI, authAPI, lecturerAPI } from '../services/api';
 
 const AdminDashboard = () => {
   const [departmentName, setDepartmentName] = useState('');
@@ -17,6 +17,14 @@ const AdminDashboard = () => {
     const twoDigit = cleaned.match(/^(\d{2})\s*\/\s*(\d{2})$/);
     if (twoDigit) return `${twoDigit[1]}/${twoDigit[2]}`;
     return cleaned;
+  };
+
+  const getAverageColor = (avg) => {
+    if (avg >= 4.5) return 'text-emerald-600';
+    if (avg >= 4.0) return 'text-green-600';
+    if (avg >= 3.0) return 'text-yellow-600';
+    if (avg >= 2.0) return 'text-orange-600';
+    return 'text-red-600';
   };
   const [userId, setUserId] = useState('');
   const [departments, setDepartments] = useState([]);
@@ -40,6 +48,17 @@ const AdminDashboard = () => {
   const [lecturerImportFile, setLecturerImportFile] = useState(null);
   const [lecturerImportResult, setLecturerImportResult] = useState(null);
   const [lecturerImporting, setLecturerImporting] = useState(false);
+  const [reportFilters, setReportFilters] = useState({
+    academicYear: '',
+    year: '',
+    semester: '',
+    department: '',
+    subject: '',
+  });
+  const [reports, setReports] = useState([]);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [downloadLoading, setDownloadLoading] = useState(false);
+  const [reportError, setReportError] = useState('');
 
   const adminSections = [
     { id: 'pending', label: 'Pending approvals' },
@@ -47,10 +66,12 @@ const AdminDashboard = () => {
     { id: 'subjects', label: 'Subjects' },
     { id: 'students', label: 'Students' },
     { id: 'lecturers', label: 'Lecturers' },
+    { id: 'feedback', label: 'Feedback summary' },
   ];
   const hodSections = [
     { id: 'assignments', label: 'Lecturer assignments' },
     { id: 'semesters', label: 'Semesters' },
+    { id: 'feedback', label: 'Feedback summary' },
   ];
   const { logout, user } = useContext(AuthContext);
   const navigate = useNavigate();
@@ -303,6 +324,71 @@ const AdminDashboard = () => {
     ])
   ).sort();
 
+  const handleReportFilterChange = (key, value) => {
+    setReportFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const buildReportParams = () => {
+    const params = {};
+    if (reportFilters.academicYear) params.academicYear = reportFilters.academicYear;
+    if (reportFilters.year && reportFilters.semester) {
+      params.year = reportFilters.year;
+      params.semester = reportFilters.semester;
+    }
+    if (reportFilters.subject) params.subject = reportFilters.subject;
+    if (isAdmin && reportFilters.department) params.department = reportFilters.department;
+    return params;
+  };
+
+  const validateReportFilters = () => {
+    if ((reportFilters.year && !reportFilters.semester) || (!reportFilters.year && reportFilters.semester)) {
+      setReportError('Select both year and semester to filter by term.');
+      return false;
+    }
+    setReportError('');
+    return true;
+  };
+
+  const fetchReports = async () => {
+    if (!validateReportFilters()) return;
+    const params = buildReportParams();
+
+    try {
+      setReportLoading(true);
+      const res = await lecturerAPI.getReport(params);
+      setReports(res.data || []);
+    } catch (err) {
+      console.error('Failed to fetch feedback summary', err);
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  const handleDownloadReports = async () => {
+    if (!validateReportFilters()) return;
+    const params = buildReportParams();
+    const academicYearSafe = (reportFilters.academicYear || 'all').replace(/\//g, '-');
+
+    try {
+      setDownloadLoading(true);
+      const res = await adminAPI.downloadFeedbackReportPdf(params);
+      const blob = new Blob([res.data], { type: 'application/zip' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `feedback-reports-${academicYearSafe}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to download feedback reports', err);
+      alert('Failed to download feedback reports');
+    } finally {
+      setDownloadLoading(false);
+    }
+  };
+
   const filteredStudents = dashboardData.students.filter((s) => {
     const deptId = s.userId?.department?._id;
     const semLabel = `${s.year} ${s.semester}`;
@@ -324,6 +410,25 @@ const AdminDashboard = () => {
   if (isHod && user?.id && !assignmentLecturers.some((lecturer) => lecturer._id === user.id)) {
     assignmentLecturers.push({ _id: user.id, name: user.name || 'HOD' });
   }
+
+  const reportSubjectOptions = dashboardData.subjects.filter((subject) => {
+    const deptId = subject.department?._id || subject.department;
+    if (isAdmin && reportFilters.department && deptId !== reportFilters.department) return false;
+    if (reportFilters.academicYear && subject.academicYear !== reportFilters.academicYear) return false;
+    if (reportFilters.year && reportFilters.semester) {
+      const termLabel = `${reportFilters.year} ${reportFilters.semester}`;
+      if (subject.semester !== termLabel) return false;
+    }
+    return true;
+  });
+
+  useEffect(() => {
+    if (!reportFilters.subject) return;
+    const stillValid = reportSubjectOptions.some((s) => s._id === reportFilters.subject);
+    if (!stillValid) {
+      setReportFilters((prev) => ({ ...prev, subject: '' }));
+    }
+  }, [reportSubjectOptions, reportFilters.subject]);
 
 
   return (
@@ -1030,6 +1135,147 @@ const AdminDashboard = () => {
                     ))}
                     {lecturerRoster.length === 0 && <p className="text-gray-500 italic">No lecturers found.</p>}
                   </ul>
+                </div>
+              </div>
+            )}
+
+            {activeSection === 'feedback' && (
+              <div className="space-y-6">
+                <div className="card-surface rounded-3xl p-6 interactive-card">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900">Feedback summary</h3>
+                      <p className="text-xs text-gray-500">Filter by academic year, term, and subject to review averages.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={fetchReports}
+                        className="px-5 py-3 rounded-2xl bg-slate-900 text-white text-sm font-semibold shadow-lg hover:-translate-y-0.5 transition-all"
+                      >
+                        {reportLoading ? 'Loading...' : 'Apply filters'}
+                      </button>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={handleDownloadReports}
+                          className="px-5 py-3 rounded-2xl bg-white text-slate-900 text-sm font-semibold border border-slate-200 shadow-lg hover:-translate-y-0.5 transition-all"
+                          disabled={downloadLoading}
+                        >
+                          {downloadLoading ? 'Preparing ZIP...' : 'Download PDFs'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold uppercase tracking-widest text-gray-400">Academic year</label>
+                      <select
+                        value={reportFilters.academicYear}
+                        onChange={(e) => handleReportFilterChange('academicYear', e.target.value)}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none"
+                      >
+                        <option value="">All</option>
+                        {plannerAcademicYears.map((ay) => (
+                          <option key={ay} value={ay}>{ay}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold uppercase tracking-widest text-gray-400">Year</label>
+                      <select
+                        value={reportFilters.year}
+                        onChange={(e) => handleReportFilterChange('year', e.target.value)}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none"
+                      >
+                        <option value="">All</option>
+                        {['Year I', 'Year II', 'Year III'].map((year) => (
+                          <option key={year} value={year}>{year}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold uppercase tracking-widest text-gray-400">Semester</label>
+                      <select
+                        value={reportFilters.semester}
+                        onChange={(e) => handleReportFilterChange('semester', e.target.value)}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none"
+                      >
+                        <option value="">All</option>
+                        {['Semester I', 'Semester II'].map((semester) => (
+                          <option key={semester} value={semester}>{semester}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {isAdmin && (
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase tracking-widest text-gray-400">Department</label>
+                        <select
+                          value={reportFilters.department}
+                          onChange={(e) => handleReportFilterChange('department', e.target.value)}
+                          className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none"
+                        >
+                          <option value="">All</option>
+                          {departments.map((dep) => (
+                            <option key={dep._id} value={dep._id}>{dep.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold uppercase tracking-widest text-gray-400">Subject</label>
+                      <select
+                        value={reportFilters.subject}
+                        onChange={(e) => handleReportFilterChange('subject', e.target.value)}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 outline-none"
+                      >
+                        <option value="">All subjects</option>
+                        {reportSubjectOptions.map((subject) => (
+                          <option key={subject._id} value={subject._id}>{subject.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {reportError && (
+                    <p className="mt-4 text-sm font-semibold text-rose-600">{reportError}</p>
+                  )}
+                </div>
+
+                <div className="card-surface rounded-3xl p-6 interactive-card">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-bold text-gray-900">Report results</h3>
+                    <span className="text-xs font-semibold px-3 py-1 rounded-full bg-blue-50 text-blue-700">{reports.length} subjects</span>
+                  </div>
+
+                  {reports.length === 0 ? (
+                    <p className="text-gray-500 italic">No feedback summaries found for the selected filters.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {reports.map((report) => (
+                        <div key={report.subjectId} className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <h4 className="text-lg font-bold text-gray-900">{report.subject}</h4>
+                              <p className="text-xs text-gray-500">Subject ID: {report.subjectId}</p>
+                            </div>
+                            <span className="text-xs font-semibold px-2 py-1 rounded-full bg-slate-900 text-white">{report.totalFeedbacks} entries</span>
+                          </div>
+                          <div className="mt-4 flex items-center justify-between text-sm">
+                            <span className="text-gray-500">Overall average</span>
+                            <span className={`text-lg font-black ${getAverageColor(report.overallAverage)}`}>
+                              {report.totalFeedbacks ? report.overallAverage.toFixed(1) : '—'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

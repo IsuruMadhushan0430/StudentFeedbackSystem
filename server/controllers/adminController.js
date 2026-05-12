@@ -1,5 +1,9 @@
+const mongoose = require('mongoose');
+const PDFDocument = require('pdfkit');
+const archiver = require('archiver');
 const Department = require('../models/Department');
 const Subject = require('../models/Subject');
+const Feedback = require('../models/Feedback');
 const User = require('../models/User');
 const Student = require('../models/Student');
 const Lecturer = require('../models/Lecturer');
@@ -362,6 +366,57 @@ const normalizeAcademicYear = (value) => {
   return cleaned;
 };
 
+const safeFilenamePart = (value) => {
+  return String(value || '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[\\/:*?"<>|]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase();
+};
+
+const buildPdfBuffer = ({ semester, academicYear, departmentLabel, reports }) => {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 40 });
+    const chunks = [];
+
+    doc.on('data', (chunk) => chunks.push(chunk));
+    doc.on('error', reject);
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+
+    doc.fontSize(18).text('Feedback Summary Report');
+    doc.moveDown(0.5);
+    doc.fontSize(11).text(`Semester: ${semester}`);
+    doc.text(`Academic Year: ${academicYear || 'All'}`);
+    doc.text(`Department: ${departmentLabel || 'All'}`);
+    doc.moveDown();
+
+    reports.forEach((report) => {
+      doc.fontSize(12).text(report.subject);
+      doc.fontSize(10).text(`Department: ${report.departmentName || 'N/A'}`);
+      doc.text(`Total feedbacks: ${report.totalFeedbacks}`);
+      doc.text(
+        `Overall average: ${report.totalFeedbacks ? report.overallAverage.toFixed(2) : 'N/A'}`
+      );
+
+      if (report.averageRatings.length) {
+        const avgLine = report.averageRatings
+          .map((avg, index) => `Q${index + 1} ${avg.toFixed(2)}`)
+          .join(' | ');
+        doc.text(`Averages: ${avgLine}`);
+      }
+
+      doc.moveDown();
+      if (doc.y > 700) {
+        doc.addPage();
+      }
+    });
+
+    doc.end();
+  });
+};
+
 const generateTempPassword = () => {
   let password = '';
   while (password.length < 8) {
@@ -716,5 +771,149 @@ exports.demoteHod = async (req, res) => {
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server error');
+  }
+};
+
+exports.downloadFeedbackReportsPdf = async (req, res) => {
+  try {
+    const { academicYear, year, semester, department, subject } = req.query;
+
+    if ((year && !semester) || (!year && semester)) {
+      return res.status(400).json({ message: 'Both year and semester are required to filter by term' });
+    }
+
+    const subjectFilter = {};
+
+    if (academicYear) {
+      subjectFilter.academicYear = academicYear;
+    }
+
+    if (year && semester) {
+      subjectFilter.semester = `${year} ${semester}`;
+    }
+
+    if (department) {
+      if (!mongoose.Types.ObjectId.isValid(department)) {
+        return res.status(400).json({ message: 'Invalid department filter' });
+      }
+      subjectFilter.department = department;
+    }
+
+    if (subject) {
+      if (!mongoose.Types.ObjectId.isValid(subject)) {
+        return res.status(400).json({ message: 'Invalid subject filter' });
+      }
+      subjectFilter._id = subject;
+    }
+
+    const subjects = await Subject.find(subjectFilter)
+      .populate('department', 'name')
+      .select('_id name department semester academicYear')
+      .lean();
+
+    if (!subjects.length) {
+      return res.status(404).json({ message: 'No feedback summaries found for the selected filters' });
+    }
+
+    const subjectIds = subjects.map((item) => item._id);
+    const feedbacks = await Feedback.find({ subjectId: { $in: subjectIds } })
+      .select('subjectId ratings')
+      .lean();
+
+    const reportMap = new Map(
+      subjects.map((subjectDoc) => [
+        String(subjectDoc._id),
+        {
+          subjectId: subjectDoc._id,
+          subject: subjectDoc.name,
+          departmentName: subjectDoc.department?.name || 'N/A',
+          semester: subjectDoc.semester,
+          totalFeedbacks: 0,
+          ratingsSum: new Array(10).fill(0),
+        },
+      ])
+    );
+
+    feedbacks.forEach((fb) => {
+      const entry = reportMap.get(String(fb.subjectId));
+      if (!entry) return;
+      entry.totalFeedbacks += 1;
+      entry.ratingsSum = entry.ratingsSum.map((sum, idx) => sum + (fb.ratings[idx] || 0));
+    });
+
+    const reports = Array.from(reportMap.values()).map((entry) => {
+      if (!entry.totalFeedbacks) {
+        return {
+          subjectId: entry.subjectId,
+          subject: entry.subject,
+          departmentName: entry.departmentName,
+          semester: entry.semester,
+          totalFeedbacks: 0,
+          averageRatings: [],
+          overallAverage: 0,
+        };
+      }
+
+      const averageRatings = entry.ratingsSum.map((sum) => sum / entry.totalFeedbacks);
+      const overallAverage = averageRatings.reduce((acc, value) => acc + value, 0) / 10;
+
+      return {
+        subjectId: entry.subjectId,
+        subject: entry.subject,
+        departmentName: entry.departmentName,
+        semester: entry.semester,
+        totalFeedbacks: entry.totalFeedbacks,
+        averageRatings,
+        overallAverage,
+      };
+    });
+
+    const reportsBySemester = reports.reduce((acc, report) => {
+      const key = report.semester || 'Unknown Semester';
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(report);
+      return acc;
+    }, {});
+
+    const safeYear = safeFilenamePart(academicYear || 'all') || 'all';
+    const zipFileName = `feedback-reports-${safeYear}.zip`;
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${zipFileName}"`);
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.on('error', (err) => {
+      console.error('Archive error', err);
+      if (!res.headersSent) {
+        res.status(500).json({ message: 'Failed to generate report archive' });
+      } else {
+        res.end();
+      }
+    });
+
+    archive.pipe(res);
+
+    const departmentLabel = department
+      ? subjects[0]?.department?.name || 'Selected Department'
+      : 'All Departments';
+
+    for (const [semesterLabel, semesterReports] of Object.entries(reportsBySemester)) {
+      const buffer = await buildPdfBuffer({
+        semester: semesterLabel,
+        academicYear,
+        departmentLabel,
+        reports: semesterReports,
+      });
+      const semesterSafe = safeFilenamePart(semesterLabel) || 'semester';
+      const pdfName = `feedback-${safeYear}-${semesterSafe}.pdf`;
+      archive.append(buffer, { name: pdfName });
+    }
+
+    await archive.finalize();
+  } catch (err) {
+    console.error(err.message);
+    if (!res.headersSent) {
+      res.status(500).send('Server error');
+    }
   }
 };

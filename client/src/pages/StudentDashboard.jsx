@@ -340,7 +340,7 @@ const StudentDashboard = () => {
               <div className="p-8">
                 <div className="mb-8 p-4 bg-blue-50 border border-blue-100 rounded-xl">
                   <p className="text-blue-800 text-sm leading-relaxed">
-                    <strong>Note:</strong> Your feedback is strictly anonymous. The lecturer only sees the aggregated scores and comments.
+                    <strong>Note:</strong> Your feedback is strictly anonymous. The lecturer only sees the aggregated scores.
                   </p>
                 </div>
 

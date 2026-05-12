@@ -9,6 +9,14 @@ const LecturerDashboard = () => {
   const [selectedSubjectId, setSelectedSubjectId] = useState(null);
   const [newFeedbackMap, setNewFeedbackMap] = useState({});
   const [loading, setLoading] = useState(true);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [filterError, setFilterError] = useState('');
+  const [reportFilters, setReportFilters] = useState({
+    academicYear: '',
+    year: '',
+    semester: '',
+    subject: '',
+  });
   const { logout, user } = useContext(AuthContext);
   const navigate = useNavigate();
 
@@ -19,17 +27,39 @@ const LecturerDashboard = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const [reportRes, subjectRes] = await Promise.all([
-        lecturerAPI.getReport(),
+      const [subjectRes] = await Promise.all([
         lecturerAPI.getSubjects()
       ]);
-      setReports(reportRes.data);
-      hydrateNewFeedbackFlags(reportRes.data);
       setSubjects(subjectRes.data);
+      await fetchReports({});
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const buildReportParams = (filters) => {
+    const params = {};
+    if (filters.academicYear) params.academicYear = filters.academicYear;
+    if (filters.year && filters.semester) {
+      params.year = filters.year;
+      params.semester = filters.semester;
+    }
+    if (filters.subject) params.subject = filters.subject;
+    return params;
+  };
+
+  const fetchReports = async (params) => {
+    try {
+      setReportLoading(true);
+      const res = await lecturerAPI.getReport(params);
+      setReports(res.data);
+      hydrateNewFeedbackFlags(res.data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setReportLoading(false);
     }
   };
 
@@ -54,6 +84,21 @@ const LecturerDashboard = () => {
   };
 
   const getSubjectReport = (subjectId) => reports.find((r) => r.subjectId?.toString() === subjectId);
+
+  const handleFilterChange = (key, value) => {
+    setReportFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const applyFilters = async () => {
+    if ((reportFilters.year && !reportFilters.semester) || (!reportFilters.year && reportFilters.semester)) {
+      setFilterError('Select both year and semester to filter by term.');
+      return;
+    }
+    setFilterError('');
+    setSelectedSubjectId(reportFilters.subject || null);
+    const params = buildReportParams(reportFilters);
+    await fetchReports(params);
+  };
 
   const handleSubjectSelect = (subjectId) => {
     setSelectedSubjectId(subjectId);
@@ -90,7 +135,17 @@ const LecturerDashboard = () => {
     return 'bg-red-500';
   };
 
-  const orderedSubjects = [...subjects]
+  const filteredSubjectsForDisplay = subjects.filter((subject) => {
+    if (reportFilters.academicYear && subject.academicYear !== reportFilters.academicYear) return false;
+    if (reportFilters.year && reportFilters.semester) {
+      const termLabel = `${reportFilters.year} ${reportFilters.semester}`;
+      if (subject.semester !== termLabel) return false;
+    }
+    if (reportFilters.subject && subject._id !== reportFilters.subject) return false;
+    return true;
+  });
+
+  const orderedSubjects = [...filteredSubjectsForDisplay]
     .sort((a, b) => {
       const semesterCompare = (a.semester || '').localeCompare(b.semester || '');
       if (semesterCompare !== 0) return semesterCompare;
@@ -100,6 +155,19 @@ const LecturerDashboard = () => {
   const visibleSubjects = selectedSubjectId
     ? orderedSubjects.filter((s) => s._id === selectedSubjectId)
     : orderedSubjects;
+
+  const academicYearOptions = Array.from(
+    new Set(subjects.map((s) => s.academicYear).filter(Boolean))
+  ).sort();
+
+  const filteredSubjectOptions = subjects.filter((subject) => {
+    if (reportFilters.academicYear && subject.academicYear !== reportFilters.academicYear) return false;
+    if (reportFilters.year && reportFilters.semester) {
+      const termLabel = `${reportFilters.year} ${reportFilters.semester}`;
+      if (subject.semester !== termLabel) return false;
+    }
+    return true;
+  });
 
   if (loading) {
     return (
@@ -151,6 +219,75 @@ const LecturerDashboard = () => {
           </div>
         </div>
 
+        <div className="mb-8">
+          <div className="bg-white border border-gray-100 rounded-2xl p-4 md:p-6 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-end gap-4 md:gap-6">
+              <div className="flex-1">
+                <label className="text-xs font-semibold uppercase tracking-widest text-gray-400">Academic year</label>
+                <select
+                  value={reportFilters.academicYear}
+                  onChange={(e) => handleFilterChange('academicYear', e.target.value)}
+                  className="mt-2 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm"
+                >
+                  <option value="">All</option>
+                  {academicYearOptions.map((year) => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex-1">
+                <label className="text-xs font-semibold uppercase tracking-widest text-gray-400">Year</label>
+                <select
+                  value={reportFilters.year}
+                  onChange={(e) => handleFilterChange('year', e.target.value)}
+                  className="mt-2 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm"
+                >
+                  <option value="">All</option>
+                  {['Year I', 'Year II', 'Year III'].map((year) => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex-1">
+                <label className="text-xs font-semibold uppercase tracking-widest text-gray-400">Semester</label>
+                <select
+                  value={reportFilters.semester}
+                  onChange={(e) => handleFilterChange('semester', e.target.value)}
+                  className="mt-2 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm"
+                >
+                  <option value="">All</option>
+                  {['Semester I', 'Semester II'].map((semester) => (
+                    <option key={semester} value={semester}>{semester}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex-[1.2]">
+                <label className="text-xs font-semibold uppercase tracking-widest text-gray-400">Subject</label>
+                <select
+                  value={reportFilters.subject}
+                  onChange={(e) => handleFilterChange('subject', e.target.value)}
+                  className="mt-2 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm"
+                >
+                  <option value="">All subjects</option>
+                  {filteredSubjectOptions.map((subject) => (
+                    <option key={subject._id} value={subject._id}>{subject.name}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={applyFilters}
+                className="h-11 px-5 rounded-2xl bg-blue-600 text-white text-sm font-semibold shadow-sm hover:bg-blue-700 transition"
+              >
+                {reportLoading ? 'Applying...' : 'Apply filters'}
+              </button>
+            </div>
+            {filterError && (
+              <p className="mt-3 text-sm text-rose-500 font-semibold">{filterError}</p>
+            )}
+          </div>
+        </div>
+
         <div className="mb-12">
           <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
             <span className="w-2 h-8 bg-blue-500 rounded-full mr-3"></span>
@@ -158,7 +295,7 @@ const LecturerDashboard = () => {
           </h2>
 
           <div className="flex items-center gap-2 text-xs text-gray-500 font-semibold mb-4">
-            <span className="px-3 py-1 rounded-full bg-white border border-gray-200">Subjects: {subjects.length}</span>
+            <span className="px-3 py-1 rounded-full bg-white border border-gray-200">Subjects: {filteredSubjectsForDisplay.length}</span>
             <span className="px-3 py-1 rounded-full bg-white border border-gray-200">Feedback windows: per subject</span>
           </div>
 
@@ -259,54 +396,31 @@ const LecturerDashboard = () => {
                 </div>
 
                 <div className="p-6 md:p-8">
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-                    <div>
-                      <h4 className="text-lg font-bold text-gray-800 mb-6 flex items-center">
-                        <span className="w-1.5 h-6 bg-blue-500 rounded-full mr-3"></span>
-                        Metric Breakdown
-                      </h4>
-                      <div className="space-y-6">
-                        {['Knowledge of subject', 'Clarity of explanations', 'Teaching methods', 'Communication skills', 'Student engagement', 'Course organization', 'Learning materials', 'Responsiveness', 'Practical examples', 'Overall effectiveness'].map((label, i) => {
-                          const rating = selectedReport.averageRatings[i] ?? 0;
-                          return (
-                          <div key={i}>
-                            <div className="flex justify-between text-sm mb-2">
-                              <span className="text-gray-600 font-medium">{label}</span>
-                              <span className={`font-bold ${getRatingColor(rating)}`}>
-                                {rating.toFixed(1)} / 5.0
-                              </span>
-                            </div>
-                            <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
-                              <div 
-                                className={`h-full transition-all duration-1000 ${getProgressBarColor(rating)}`}
-                                style={{ width: `${(rating / 5) * 100}%` }}
-                              ></div>
-                            </div>
+                  <div>
+                    <h4 className="text-lg font-bold text-gray-800 mb-6 flex items-center">
+                      <span className="w-1.5 h-6 bg-blue-500 rounded-full mr-3"></span>
+                      Metric Breakdown
+                    </h4>
+                    <div className="space-y-6">
+                      {['Knowledge of subject', 'Clarity of explanations', 'Teaching methods', 'Communication skills', 'Student engagement', 'Course organization', 'Learning materials', 'Responsiveness', 'Practical examples', 'Overall effectiveness'].map((label, i) => {
+                        const rating = selectedReport.averageRatings[i] ?? 0;
+                        return (
+                        <div key={i}>
+                          <div className="flex justify-between text-sm mb-2">
+                            <span className="text-gray-600 font-medium">{label}</span>
+                            <span className={`font-bold ${getRatingColor(rating)}`}>
+                              {rating.toFixed(1)} / 5.0
+                            </span>
                           </div>
-                        );
-                        })}
-                      </div>
-                    </div>
-
-                    <div>
-                      <h4 className="text-lg font-bold text-gray-800 mb-6 flex items-center">
-                        <span className="w-1.5 h-6 bg-purple-500 rounded-full mr-3"></span>
-                        Student Comments
-                      </h4>
-                      <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                        {selectedReport.comments.filter(c => c && c.trim()).length > 0 ? (
-                          selectedReport.comments.filter(c => c && c.trim()).map((comment, i) => (
-                            <div key={i} className="bg-gray-50 p-4 rounded-xl border border-gray-100 relative group">
-                              <span className="text-3xl text-gray-200 absolute top-2 right-4 opacity-50 group-hover:opacity-100 transition-opacity font-serif">"</span>
-                              <p className="text-gray-700 italic text-sm leading-relaxed relative z-10">
-                                {comment}
-                              </p>
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-gray-400 italic text-center py-12">No qualifying comments provided yet.</p>
-                        )}
-                      </div>
+                          <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full transition-all duration-1000 ${getProgressBarColor(rating)}`}
+                              style={{ width: `${(rating / 5) * 100}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      );
+                      })}
                     </div>
                   </div>
                 </div>

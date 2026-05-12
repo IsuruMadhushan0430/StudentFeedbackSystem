@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.get('/feedback', auth, roleAuth(['lecturer', 'hod']), lecturerController.getFeedback);
 
-router.get('/report', auth, roleAuth(['lecturer', 'hod']), lecturerController.getReport);
+router.get('/report', auth, roleAuth(['lecturer', 'hod', 'admin']), lecturerController.getReport);
 router.get('/subjects', auth, roleAuth(['lecturer', 'hod']), lecturerController.getSubjects);
 
 module.exports = router;

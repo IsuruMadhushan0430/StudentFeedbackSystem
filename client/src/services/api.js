@@ -28,7 +28,7 @@ export const studentAPI = {
 
 export const lecturerAPI = {
   getFeedback: () => API.get('/lecturer/feedback'),
-  getReport: () => API.get('/lecturer/report'),
+  getReport: (params) => API.get('/lecturer/report', { params }),
   getSubjects: () => API.get('/lecturer/subjects'),
 };
 
@@ -51,6 +51,10 @@ export const adminAPI = {
   }),
   importLecturers: (formData) => API.post('/admin/lecturers/import', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  downloadFeedbackReportPdf: (params) => API.get('/admin/feedback-report/pdf', {
+    params,
+    responseType: 'blob',
   }),
 };
 

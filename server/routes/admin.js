@@ -60,6 +60,7 @@ router.get('/users/pending', auth, roleAuth(['admin']), adminController.getPendi
 router.put('/users/:userId/approval', auth, roleAuth(['admin']), adminController.updateUserApproval);
 router.put('/users/:userId/promote-hod', auth, roleAuth(['admin']), adminController.promoteToHod);
 router.put('/users/:userId/demote-hod', auth, roleAuth(['admin']), adminController.demoteHod);
+router.get('/feedback-report/pdf', auth, roleAuth(['admin']), adminController.downloadFeedbackReportsPdf);
 router.post('/students/import', auth, roleAuth(['admin']), upload.single('file'), adminController.importStudents);
 router.post('/lecturers/import', auth, roleAuth(['admin']), upload.single('file'), adminController.importLecturers);
 
