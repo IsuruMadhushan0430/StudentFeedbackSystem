@@ -40,8 +40,7 @@ const AdminDashboard = () => {
     semesters: []
   });
   const [editingSemester, setEditingSemester] = useState(null);
-  const [pendingUsers, setPendingUsers] = useState([]);
-  const [activeSection, setActiveSection] = useState('pending');
+  const [activeSection, setActiveSection] = useState('departments');
   const [importFile, setImportFile] = useState(null);
   const [importResult, setImportResult] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -61,7 +60,6 @@ const AdminDashboard = () => {
   const [reportError, setReportError] = useState('');
 
   const adminSections = [
-    { id: 'pending', label: 'Pending approvals' },
     { id: 'departments', label: 'Departments' },
     { id: 'subjects', label: 'Subjects' },
     { id: 'students', label: 'Students' },
@@ -100,21 +98,9 @@ const AdminDashboard = () => {
     }
   };
 
-  const fetchPendingUsers = async () => {
-    try {
-      const res = await adminAPI.getPendingUsers();
-      setPendingUsers(res.data);
-    } catch (err) {
-      console.error('Failed to fetch pending users', err);
-    }
-  };
-
   useEffect(() => {
     fetchDepartments();
     fetchDashboardData();
-    if (isAdmin) {
-      fetchPendingUsers();
-    }
   }, [isAdmin]);
 
   useEffect(() => {
@@ -225,18 +211,6 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleApproval = async (userId, approve) => {
-    const action = approve ? 'approve' : 'reject';
-    if (!window.confirm(`Are you sure you want to ${action} this user?`)) return;
-    try {
-      await adminAPI.updateUserApproval(userId, { approve });
-      alert(`User ${action}ed successfully`);
-      fetchPendingUsers(); // Refresh pending list
-      fetchDashboardData(); // Refresh main dashboard data if user was approved
-    } catch (err) {
-      alert(err.response?.data?.message || `Error ${action}ing user`);
-    }
-  };
 
   const handlePromoteToHod = async (userId) => {
     if (!window.confirm('Promote this lecturer to HOD?')) return;
@@ -483,31 +457,6 @@ const AdminDashboard = () => {
           </aside>
 
           <main className="space-y-6">
-            {activeSection === 'pending' && (
-              <div className="card-surface rounded-3xl p-6 interactive-card">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-bold text-gray-900">Pending lecturer approvals ({pendingUsers.length})</h3>
-                  <span className="text-xs font-semibold px-3 py-1 rounded-full bg-yellow-50 text-yellow-700">Action Required</span>
-                </div>
-                <ul className="space-y-3">
-                  {pendingUsers.map((user) => (
-                    <li key={user._id} className="flex justify-between items-start bg-gray-50 border border-gray-100 rounded-2xl p-3">
-                      <div>
-                        <p className="font-semibold text-gray-900">{user.name}</p>
-                        <p className="text-gray-600 text-sm">{user.email}</p>
-                        <p className="text-gray-500 text-xs mt-1">Dept: {user.department?.name || 'N/A'}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => handleApproval(user._id, true)} className="text-green-600 hover:text-green-700 text-xs font-semibold">Approve</button>
-                        <button onClick={() => handleApproval(user._id, false)} className="text-red-600 hover:text-red-700 text-xs font-semibold">Reject</button>
-                      </div>
-                    </li>
-                  ))}
-                  {pendingUsers.length === 0 && <p className="text-gray-500 italic">No pending approvals.</p>}
-                </ul>
-              </div>
-            )}
-
             {activeSection === 'departments' && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="card-surface rounded-3xl p-6 interactive-card">

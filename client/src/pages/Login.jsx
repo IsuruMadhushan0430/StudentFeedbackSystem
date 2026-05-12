@@ -140,13 +140,6 @@ const Login = () => {
             <button type="submit" className="w-full py-3 rounded-2xl text-white font-semibold shadow-lg transition-all duration-200 neon-pill">Login</button>
           </form>
 
-          <div className="mt-6 p-4 bg-gray-50 rounded-2xl border border-gray-100 text-sm flex items-center justify-between">
-            <div>
-              <p className="font-semibold text-gray-800">New here?</p>
-              <p className="text-gray-500">Create an account to access your portal.</p>
-            </div>
-            <Link to="/register" className="text-blue-600 font-semibold hover:underline">Register</Link>
-          </div>
         </div>
       </div>
     </div>
