@@ -3,6 +3,7 @@ const Subject = require('../models/Subject');
 const Feedback = require('../models/Feedback');
 const FeedbackSubmission = require('../models/FeedbackSubmission');
 const Semester = require('../models/Semester');
+const { checkAndNotifyBatchCompletion } = require('../utils/feedbackNotifications');
 const { validationResult } = require('express-validator');
 
 exports.getSubjects = async (req, res) => {
@@ -83,9 +84,13 @@ exports.submitFeedback = async (req, res) => {
 
     const { department } = student.userId;
     const semesterStr = `${student.year} ${student.semester}`;
-    const semester = await Semester.findOne({ 
-      department: department, 
-      semester: semesterStr 
+    const semester = await Semester.findOne({
+      department: department,
+      semester: semesterStr,
+      academicYear: student.academicYear,
+    }) || await Semester.findOne({
+      department: department,
+      semester: semesterStr,
     });
 
     if (!semester) {
@@ -139,6 +144,8 @@ exports.submitFeedback = async (req, res) => {
       }
       throw submissionErr;
     }
+
+    await checkAndNotifyBatchCompletion({ subjectId, student });
 
     res.json({ message: 'Feedback submitted successfully' });
   } catch (err) {

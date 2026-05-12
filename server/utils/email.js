@@ -77,7 +77,32 @@ const sendLecturerWelcomeEmail = async ({ to, name, tempPassword, loginUrl }) =>
   });
 };
 
+const sendFeedbackCompletionEmail = async ({ to, name, subjectName, batchLabel, reasonText }) => {
+  const transporter = createTransporter();
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; color: #1f2937;">
+      <h2 style="margin-bottom: 8px;">Feedback Period Update</h2>
+      <p style="margin: 0 0 12px;">Hi ${name || 'User'},</p>
+      <p style="margin: 0 0 12px;">
+        Feedback notifications for <strong>${subjectName}</strong> (${batchLabel}).
+      </p>
+      <p style="margin: 0 0 12px;">${reasonText}</p>
+      <p style="margin-top: 16px; font-size: 12px; color: #6b7280;">This is an automated message from the Student Feedback System.</p>
+    </div>
+  `;
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject: `Feedback completed for ${subjectName}`,
+    html,
+  });
+};
+
 module.exports = {
   sendStudentWelcomeEmail,
   sendLecturerWelcomeEmail,
+  sendFeedbackCompletionEmail,
 };
